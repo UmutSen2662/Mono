@@ -1,0 +1,139 @@
+<%- contentFor('script') %>
+<link rel="stylesheet" href="/public/index.css" />
+<script>
+    const throttle = (func, limit) => {
+        let lastFunc;
+        let lastRan;
+        return (...args) => {
+            const context = this;
+            if (!lastRan) {
+                func.apply(context, args);
+                lastRan = Date.now();
+            } else {
+                clearTimeout(lastFunc);
+                lastFunc = setTimeout(function () {
+                    if (Date.now() - lastRan >= limit) {
+                        func.apply(context, args);
+                        lastRan = Date.now();
+                    }
+                }, limit - (Date.now() - lastRan));
+            }
+        };
+    };
+
+    let room_search = null;
+    document.addEventListener("DOMContentLoaded", () => {
+        room_search = document.getElementById("room_search");
+        room_interval();
+    });
+    const get_rooms = throttle(() => {
+        fetch("/get_rooms", {
+            method: "post",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ search: room_search.value }),
+        })
+            .then((response) => response.text())
+            .then((html) => {
+                document.querySelector(".rooms").innerHTML = html;
+            });
+    }, 800);
+    function room_interval() {
+        const socket = io();
+
+        socket.on("connect", () => {
+            socket.emit("join_lobby");
+        });
+
+        socket.on("rooms_changed", () => {
+            get_rooms(); // Only fetch when server says so
+        });
+
+        get_rooms();
+    }
+
+    const update_name = throttle((name) => {
+        fetch("/update_name", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ name: name }),
+        });
+    }, 1000);
+
+    function create_room() {
+        let name = document.getElementById("room_name").value;
+        let password = document.getElementById("room_password").value;
+        window.location.href = "/create_room/name:" + name + "/password:" + password;
+    }
+
+    function open_room_modal(id) {
+        fetch(`/room_password/${id}`)
+            .then((response) => response.text())
+            .then((password) => {
+                if (password == "") {
+                    window.location.href = `/room/${id}/password:`;
+                } else {
+                    document.getElementById("join_room_button").addEventListener("click", () => {
+                        if (password == document.getElementById("join_room_password").value) {
+                            window.location.href = `/room/${id}/password:${password}`;
+                        } else {
+                            document.getElementById("join_room_password").value = "";
+                            document.getElementById("join_room_password").placeholder = "Incorrect password";
+                        }
+                    });
+                }
+            });
+        document.getElementById("join_room_modal").showModal();
+    }
+</script>
+
+<div id="title">MONO</div>
+<div id="main_div">
+    <div id="options">
+        <button id="fullscreen_button" onclick="toggle_fullscreen()">
+            <img
+                src="/public/options/fullscreen_off.svg"
+                alt="fullscreen toggle"
+                title="fullscreen toggle"
+                draggable="false"
+            />
+        </button>
+        <button id="music_button" onclick="change_music();">
+            <img src="/public/options/music_off.svg" alt="music toggle" title="music toggle" draggable="false" />
+        </button>
+        <button id="sound_button" onclick="change_sound();">
+            <img src="/public/options/sound_off.svg" alt="sound toggle" title="sound toggle" draggable="false" />
+        </button>
+        <button id="copy_link" onclick="navigator.clipboard.writeText(window.location.href)">
+            <img src="/public/options/copy_link.svg" alt="copy link" title="copy link" draggable="false" />
+        </button>
+    </div>
+    <span>&nbsp;&nbsp;Enter Name</span>
+    <input type="text" id="name_input" oninput="update_name(this.value)" value="<%= session.name %>" />
+    <span>&nbsp;&nbsp;Search rooms</span>
+    <input type="search" id="room_search" oninput="get_rooms()" />
+    <div class="rooms"></div>
+    <button id="create_room" onclick="document.getElementById('create_room_modal').showModal()">Create Room</button>
+</div>
+
+<dialog id="create_room_modal">
+    <div>
+        <span>Create Room</span>
+        <input type="text" id="room_name" placeholder="Enter room name" />
+        <input type="text" id="room_password" placeholder="Set password (optional)" />
+        <button id="back_button" onclick="document.getElementById('create_room_modal').close()">Back</button>
+        <button id="create_room_button" onclick="create_room()">Create</button>
+    </div>
+</dialog>
+
+<dialog id="join_room_modal">
+    <div>
+        <span>Join Room</span>
+        <input type="text" id="join_room_password" placeholder="Enter password" />
+        <button id="back_button" onclick="document.getElementById('join_room_modal').close()">Back</button>
+        <button id="join_room_button">Join</button>
+    </div>
+</dialog>

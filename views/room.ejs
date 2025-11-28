@@ -1,0 +1,653 @@
+<%- contentFor('script') %>
+<link rel="stylesheet" href="/public/room.css" />
+<script src="/socket.io/socket.io.js"></script>
+<script type="text/javascript" charset="utf-8">
+    const socket = io();
+    socket.on("disconnect", function () {
+        window.location.href = "/";
+    });
+
+    socket.on("reconnect", function (data) {
+        data.room.state = "s";
+        addToQueue(data);
+    });
+
+    let room = null;
+    let offset = 0;
+    let last_card = "";
+    let players = [];
+    let time = 0;
+    let drawn = false;
+    const updateQueue = [];
+    const card_sounds = [];
+    const color_sounds = [];
+
+    for (let i = 0; i < 8; i++) {
+        card_sounds[i] = new Audio("/public/audio/card" + (i + 1) + ".mp3");
+        card_sounds[i].load();
+    }
+    for (let i = 0; i < 4; i++) {
+        color_sounds[i] = new Audio("/public/audio/color" + (i + 1) + ".mp3");
+        color_sounds[i].load();
+    }
+
+    function play_card_sound() {
+        if (localStorage.getItem("sound") == 0 || room.state == "s") {
+            return;
+        }
+        const randomIndex = Math.floor(Math.random() * card_sounds.length);
+        const sound = card_sounds[randomIndex];
+        sound.playbackRate = 0.9 + Math.random() * 0.2; // Slight speed variation
+        sound.volume = 0.8 + Math.random() * 0.2; // Slight volume variation
+        sound.play();
+    }
+
+    function play_color_sound() {
+        if (localStorage.getItem("sound") == 0 || room.state == "s") {
+            return;
+        }
+        const randomIndex = Math.floor(Math.random() * color_sounds.length);
+        const sound = color_sounds[randomIndex];
+        sound.playbackRate = 0.9 + Math.random() * 0.2; // Slight speed variation
+        sound.volume = 0.6 + Math.random() * 0.2; // Slight volume variation
+        sound.play();
+    }
+
+    function start_game() {
+        document.getElementById("wait_screen_button").textContent = "+";
+        players = [
+            {
+                nameplate: document.getElementById("nameplate_0"),
+                hand: document.getElementById("hand_0"),
+                card_num: document.getElementById("card_num_0"),
+                angle: "45deg",
+            },
+            {
+                nameplate: document.getElementById("nameplate_1"),
+                hand: document.getElementById("hand_1"),
+                card_num: document.getElementById("card_num_1"),
+                angle: "225deg",
+            },
+            {
+                nameplate: document.getElementById("nameplate_2"),
+                hand: document.getElementById("hand_2"),
+                card_num: document.getElementById("card_num_2"),
+                angle: "135deg",
+            },
+            {
+                nameplate: document.getElementById("nameplate_3"),
+                hand: document.getElementById("hand_3"),
+                card_num: document.getElementById("card_num_3"),
+                angle: "315deg",
+            },
+        ];
+        document.getElementById("wait_screen").style.display = "none";
+        Array.from(document.getElementsByClassName("nameplate")).forEach((nameplate) => {
+            nameplate.style.display = "none";
+        });
+        let indexes = [0, 2, 1, 3];
+        if (room.players.length < 3) {
+            indexes = [0, 1];
+        }
+        for (let i = 0; i < offset; i++) {
+            indexes.unshift(indexes.pop());
+        }
+        players = indexes.map((i) => players[i]);
+        // remove old cards from the room
+        document.getElementById("discard_pile").replaceChildren();
+        const cards = document.querySelectorAll(".card");
+        cards.forEach((card) => {
+            card.remove();
+        });
+        const card_backs = document.querySelectorAll(".card_back");
+        card_backs.forEach((card) => {
+            card.remove();
+        });
+    }
+
+    function room_update(data) {
+        room = data.room;
+        offset = room.players.findIndex((player) => player.id == "<%= session.userId %>");
+        update_wait_screen();
+        if (room.state == "s") {
+            start_game();
+        }
+        if (room.state != "l") {
+            static();
+            document.startViewTransition(() => {
+                animated();
+                reposition_cards();
+            });
+        }
+    }
+    function processQueue() {
+        if (updateQueue.length > 0) {
+            [data, time] = updateQueue.shift();
+            setTimeout(room_update, time, data);
+        }
+        if (updateQueue.length > 0) {
+            processQueue();
+        }
+    }
+    function addToQueue(data) {
+        if (data.delay > 0) {
+            time += data.delay;
+        } else {
+            time = 0;
+        }
+        updateQueue.push([data, time]);
+        if (updateQueue.length == 1) {
+            processQueue();
+        }
+    }
+    socket.on("room_update", function (data) {
+        addToQueue(data);
+    });
+
+    document.addEventListener("keydown", function (event) {
+        if (room == null) {
+            return;
+        }
+        if (room.state == "l") {
+            return;
+        }
+        if (event.key === "Escape") {
+            update_wait_screen(true);
+        }
+    });
+
+    let values = ["", 0, 0, 0];
+    function create_discard(card) {
+        if (last_card[0] != "s" || last_card.length == 4) {
+            values[0] = card.slice(0, 2) + card.slice(3);
+            values[1] = Math.random() * 3 - 1.5;
+            values[2] = Math.random() * 4 - 2;
+            values[3] = Math.random() * 80 - 40;
+            play_card_sound();
+        } else {
+            values[0] = card.slice(0, 2) + card.slice(3);
+            play_color_sound();
+        }
+        let c = document.createElement("img");
+        c.draggable = false;
+        c.src = "/public/cards/" + values[0] + ".svg";
+        c.style =
+            "transform: translate(" +
+            values[1] +
+            "rem, " +
+            values[2] +
+            "rem) rotate(" +
+            values[3] +
+            "deg); " +
+            "view-transition-name: " +
+            card.slice(0, 3) +
+            ";";
+        c.id = card.slice(0, 3);
+        return c;
+    }
+    function sort_hand(a, b) {
+        const colorPriority = { s: 0, r: 1, g: 2, b: 3, y: 4 };
+        const typePriority = {
+            p: -10,
+            s: -11,
+            r: -12,
+            c: -13,
+            0: 0,
+            1: 1,
+            2: 2,
+            3: 3,
+            4: 4,
+            5: 5,
+            6: 6,
+            7: 7,
+            8: 8,
+            9: 9,
+        };
+
+        if (colorPriority[a[0]] !== colorPriority[b[0]]) {
+            return colorPriority[a[0]] - colorPriority[b[0]];
+        }
+        if (typePriority[a[1]] !== typePriority[b[1]]) {
+            return typePriority[a[1]] - typePriority[b[1]];
+        }
+        return 0;
+    }
+    function is_playable(card_id, state) {
+        if (state == "p4") {
+            if (card_id.slice(0, 2) == "sp") {
+                return true;
+            }
+            return false;
+        } else if (state == "p2") {
+            if (card_id[1] == "p" && card_id[0] != "s") {
+                return true;
+            }
+            return false;
+        } else if (
+            (card_id[1] == room.discard.slice(-1)[0][1] && room.discard.slice(-1)[0].length != 4) ||
+            card_id[0] == room.discard.slice(-1)[0][0] ||
+            card_id[0] == room.discard.slice(-1)[0][3] ||
+            card_id[0] == "s"
+        ) {
+            return true;
+        }
+        return false;
+    }
+    function handle_play(i) {
+        let hand = players[i].hand;
+        if (i == offset) {
+            // players hand
+            let no_playable_cards = 0;
+            for (let j = 0; j < hand.childNodes.length; ) {
+                let card = hand.childNodes[j];
+                if (card.id == room.discard.slice(-1)[0]) {
+                    card.remove();
+                } else {
+                    if (offset == room.current_player) {
+                        card.disabled = !is_playable(card.id, room.state);
+                        if (!card.disabled) {
+                            no_playable_cards++;
+                        }
+                    } else {
+                        card.disabled = true;
+                    }
+                    let len = room.players[i].hand.length;
+                    room.players[i].hand = room.players[i].hand.filter((c) => c != card.id);
+                    if (room.players[i].hand.length == len) {
+                        card.remove();
+                    } else {
+                        j++;
+                    }
+                }
+            }
+            room.players[i].hand.forEach((card) => {
+                play_card_sound();
+                let c = document.createElement("button");
+                if (offset == room.current_player) {
+                    c.disabled = !is_playable(card, room.state);
+                    if (!c.disabled) {
+                        no_playable_cards++;
+                    }
+                } else {
+                    c.disabled = true;
+                }
+                c.classList.add("card");
+                c.id = card;
+                c.innerHTML =
+                    `<img src="/public/cards/` +
+                    card.slice(0, 2) +
+                    `.svg" style="view-transition-name: ` +
+                    card +
+                    `;" draggable="false">`;
+                c.onclick = () => play_card(card);
+
+                let j = 0;
+                if (hand.childNodes.length != 0) {
+                    while (j < hand.childNodes.length && sort_hand(hand.childNodes[j].id, card) < 0) {
+                        j++;
+                    }
+                    if (j == hand.childNodes.length) {
+                        hand.appendChild(c);
+                    } else {
+                        hand.insertBefore(c, hand.childNodes[j]);
+                    }
+                } else {
+                    hand.appendChild(c);
+                }
+            });
+            if (
+                no_playable_cards == 0 &&
+                room.current_player == offset &&
+                document.getElementById("color_picker").style.display == "none"
+            ) {
+                document.getElementById("deck").classList.add("glow");
+            } else {
+                document.getElementById("deck").classList.remove("glow");
+            }
+        } else {
+            // other players hands
+            for (let j = 0; j < hand.childNodes.length; ) {
+                let card = hand.childNodes[j];
+                if (card.id == room.discard.slice(-1)[0].slice(0, 3)) {
+                    card.remove();
+                } else {
+                    let len = room.players[i].hand.length;
+                    room.players[i].hand = room.players[i].hand.filter((c) => c != card.id);
+                    if (room.players[i].hand.length == len) {
+                        card.remove();
+                    } else {
+                        j++;
+                    }
+                }
+            }
+            room.players[i].hand.forEach((card) => {
+                play_card_sound();
+                let c = document.createElement("div");
+                c.classList.add("card_back");
+                c.innerHTML =
+                    `<img src="/public/cards/card_back.svg" style="view-transition-name: ` +
+                    card +
+                    `;" draggable="false">`;
+                c.id = card;
+                hand.appendChild(c);
+            });
+        }
+    }
+    function animated() {
+        for (let i = 0; i < room.players.length; i++) {
+            handle_play(i);
+        }
+        // color picker
+        document.getElementById("color_picker").style.display = "none";
+        if (room.discard.slice(-1)[0].length != 4 && room.discard.slice(-1)[0][0] == "s") {
+            if (offset == room.current_player) {
+                document.getElementById("color_picker").style.display = "grid";
+            }
+        }
+        // discard pile
+        let discard = document.getElementById("discard_pile");
+        if (last_card != room.discard.slice(-1)[0]) {
+            discard.appendChild(create_discard(room.discard.slice(-1)[0]));
+        }
+        while (discard.childNodes.length > 12) {
+            discard.firstChild.remove();
+        }
+        if (room.discard.length > 0) {
+            last_card = room.discard[room.discard.length - 1];
+        }
+        // deck
+        let deck = document.getElementById("deck");
+        while (deck.childNodes.length > 0) {
+            deck.childNodes[0].remove();
+        }
+        for (let i = 0; i < room.plus + 1; i++) {
+            let c = document.createElement("img");
+            c.src = "/public/cards/card_back.svg";
+            c.style.viewTransitionName = room.deck.pop();
+            c.draggable = false;
+            deck.appendChild(c);
+        }
+    }
+    function static() {
+        // reverse animation
+        if (last_card != room.discard.slice(-1)[0] && room.discard.slice(-1)[0][1] == "r" && room.state != "s") {
+            let reverse = document.getElementById("reverse");
+            reverse.style.display = "block";
+            setTimeout(() => {
+                reverse.style.display = "none";
+            }, 800);
+        }
+        // skip animation
+        if (last_card != room.discard.slice(-1)[0] && room.discard.slice(-1)[0][1] == "s" && room.state != "s") {
+            let skip = document.getElementById("skip");
+            let arrow = document.getElementById("arrow");
+            arrow.style.rotate =
+                players[
+                    (room.current_player + room.players.length + (room.reversed ? 1 : -1)) % room.players.length
+                ].angle;
+            skip.style.display = "block";
+            arrow.style.display = "block";
+            setTimeout(() => {
+                skip.style.display = "none";
+                arrow.style.display = "none";
+            }, 800);
+        }
+        // deck drawn lock
+        if (room.current_player != offset) {
+            drawn = false;
+        }
+        // nameplates / turn indicators
+        for (let i = 0; i < room.players.length; i++) {
+            players[i].nameplate.style.display = "flex";
+            players[i].nameplate.firstChild.textContent = room.players[i].name;
+            players[i].card_num.textContent = room.players[i].hand.length;
+            if (room.state != "l" && i == room.current_player) {
+                players[i].nameplate.classList.add("active");
+            } else {
+                players[i].nameplate.classList.remove("active");
+            }
+        }
+        // remove card animations from stationary cards
+        document.getElementById("discard_pile").childNodes.forEach((card) => {
+            card.style.viewTransitionName = "none";
+        });
+        document.querySelectorAll(".card").forEach((card) => {
+            if (card.id != room.discard.slice(-1)[0]) {
+                card.firstChild.style.viewTransitionName = "none";
+            } else {
+                card.firstChild.style.viewTransitionName = card.id;
+            }
+        });
+        document.querySelectorAll(".card_back").forEach((card) => {
+            if (card.id != room.discard.slice(-1)[0].slice(0, 3)) {
+                card.firstChild.style.viewTransitionName = "none";
+            } else {
+                card.firstChild.style.viewTransitionName = card.id;
+            }
+        });
+        // plus display
+        let plus_display = document.getElementById("plus_display");
+        if (room.plus > 1) {
+            plus_display.textContent = "+" + room.plus;
+        } else {
+            plus_display.textContent = "";
+        }
+        // arrows
+        let arrows = document.getElementById("arrows");
+        arrows.style.display = "block";
+        if (room.reversed) {
+            arrows.style.transform = "scaleX(-1)";
+            arrows.style.animationDirection = "reverse";
+        } else {
+            arrows.style.transform = "scaleX(1)";
+            arrows.style.animationDirection = "normal";
+        }
+    }
+    function throttle(func, limit) {
+        let lastFunc;
+        let lastRan;
+        return function () {
+            const context = this;
+            const args = arguments;
+            if (!lastRan) {
+                func.apply(context, args);
+                lastRan = Date.now();
+            } else {
+                clearTimeout(lastFunc);
+                lastFunc = setTimeout(function () {
+                    if (Date.now() - lastRan >= limit) {
+                        func.apply(context, args);
+                        lastRan = Date.now();
+                    }
+                }, limit - (Date.now() - lastRan));
+            }
+        };
+    }
+    window.addEventListener("resize", throttle(reposition_cards, 500));
+    function reposition_cards() {
+        if (room.state == "l") {
+            return;
+        }
+        for (let i = 0; i < room.players.length; i++) {
+            let hand = players[i].hand;
+            let max_width =
+                window.getComputedStyle(document.documentElement).fontSize.slice(0, -2) * (i == offset ? 6 : 4);
+            let size = hand.clientWidth - max_width;
+            let length = hand.childNodes.length - 1;
+            let card_size = Math.min(size / length, max_width * 0.98);
+            let card_offset = (size - card_size * length) / 2;
+
+            hand.childNodes.forEach((card) => {
+                card.style.left = card_offset + "px";
+                card_offset += card_size;
+            });
+        }
+    }
+    function deck() {
+        if (room.current_player != offset || drawn) {
+            return;
+        }
+        drawn = true;
+        socket.emit("draw_card");
+    }
+
+    function update_wait_screen(btn = false) {
+        let button = document.getElementById("wait_screen_button");
+        if (room.state == "l") {
+            if (btn) {
+                return;
+            } else {
+                button.textContent = "-";
+            }
+        } else {
+            if (btn) {
+                button.textContent = button.textContent == "+" ? "-" : "+";
+            } else if (button.textContent == "+") {
+                return;
+            }
+        }
+
+        if (button.textContent == "-") {
+            document.getElementById("wait_screen").style.display = "flex";
+        } else {
+            document.getElementById("wait_screen").style.display = "none";
+            return;
+        }
+
+        let room_name = (document.getElementById("room_name").textContent = room.name);
+        let player_list = document.getElementById("wait_screen_players");
+        while (player_list.firstChild) {
+            player_list.firstChild.remove();
+        }
+        room.players.forEach((player) => {
+            let div = document.createElement("div");
+            if (player.ready) {
+                div.classList.add("ready");
+            } else {
+                div.classList.remove("ready");
+            }
+            if (player.bot) {
+                if (room.state == "l") {
+                    div.classList.add("bot");
+                    div.onclick = () => {
+                        socket.emit("remove_bot", player.id);
+                    };
+                }
+            }
+            div.innerHTML = "<span> " + player.name + " </span> <span> " + player.score + " </span>";
+            player_list.appendChild(div);
+        });
+        if (room.players.length < 4 && room.state == "l") {
+            let bot = document.createElement("button");
+            bot.textContent = "Add Bot";
+            bot.onclick = () => {
+                socket.emit("add_bot");
+            };
+            player_list.appendChild(bot);
+        }
+        let ready_button = document.getElementById("ready_button");
+        if (room.state != "l") {
+            ready_button.disabled = true;
+        } else if (room.players.length < 2) {
+            ready_button.disabled = true;
+        } else if (room.players[offset].ready) {
+            ready_button.disabled = true;
+        } else {
+            ready_button.disabled = false;
+        }
+    }
+
+    function play_card(card) {
+        drawn = false;
+        players[offset].hand.childNodes.forEach((c) => {
+            c.disabled = true;
+        });
+        socket.emit("play_card", card);
+    }
+</script>
+
+<div style="display: none">
+    <% cards.forEach(function(card) { %>
+    <img src="/public/cards/<%= card %>.svg" />
+    <% }); %>
+</div>
+
+<button id="wait_screen_button" onclick="update_wait_screen(true)">-</button>
+<div id="wait_screen" onclick="if (event.target == this) (update_wait_screen(true))">
+    <div id="wait_screen_div">
+        <div id="options">
+            <button id="fullscreen_button" onclick="toggle_fullscreen()">
+                <img
+                    src="/public/options/fullscreen_off.svg"
+                    alt="fullscreen toggle"
+                    title="fullscreen toggle"
+                    draggable="false"
+                />
+            </button>
+            <button id="music_button" onclick="change_music();">
+                <img src="/public/options/music_off.svg" alt="music toggle" title="music toggle" draggable="false" />
+            </button>
+            <button id="sound_button" onclick="change_sound();">
+                <img src="/public/options/sound_off.svg" alt="sound toggle" title="sound toggle" draggable="false" />
+            </button>
+            <button id="copy_link" onclick="navigator.clipboard.writeText(window.location.href)">
+                <img src="/public/options/copy_link.svg" alt="copy link" title="copy link" draggable="false" />
+            </button>
+        </div>
+        <span id="room_name">Room name</span>
+        <div id="wait_screen_decriptors"><span>Players</span><span>Wins</span></div>
+        <div id="wait_screen_players"></div>
+        <div id="wait_screen_buttons">
+            <button onclick="window.location.href = '/';">Exit</button>
+            <button id="ready_button" onclick="socket.emit(`player_ready`);">Ready</button>
+        </div>
+    </div>
+</div>
+
+<div id="remdiv" style="width: 1rem; height: 0"></div>
+<button id="deck" onclick="deck()"></button>
+<img id="arrows" src="/public/arrows.webp" style="display: none" draggable="false" />
+<img id="skip" src="/public/skip.svg" class="appear" style="display: none" draggable="false" />
+<img id="arrow" src="/public/arrow.svg" class="appear" style="display: none" draggable="false" />
+<img id="reverse" src="/public/reverse.svg" class="appear" style="display: none" draggable="false" />
+<div id="plus_display"></div>
+<div id="discard_pile"></div>
+<div id="color_picker" style="display: none">
+    <div>
+        <button class="r" onclick="socket.emit('color_picker', 'r');"></button>
+        <button class="g" onclick="socket.emit('color_picker', 'g');"></button>
+        <button class="y" onclick="socket.emit('color_picker', 'y');"></button>
+        <button class="b" onclick="socket.emit('color_picker', 'b');"></button>
+    </div>
+</div>
+
+<div id="player_0">
+    <div id="nameplate_0" class="nameplate">
+        <span id="card_num_0"></span>
+    </div>
+    <div id="hand_0"></div>
+</div>
+
+<div id="player_1">
+    <div></div>
+    <div id="hand_1"></div>
+    <div id="nameplate_1" class="nameplate">
+        <span id="card_num_1"></span>
+    </div>
+</div>
+
+<div id="player_2">
+    <div></div>
+    <div id="nameplate_2" class="nameplate">
+        <span id="card_num_2"></span>
+    </div>
+    <div id="hand_2"></div>
+</div>
+
+<div id="player_3">
+    <div></div>
+    <div id="nameplate_3" class="nameplate">
+        <span id="card_num_3"></span>
+    </div>
+    <div id="hand_3"></div>
+</div>

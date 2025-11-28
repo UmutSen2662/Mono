@@ -1,0 +1,7 @@
+<% rooms.forEach(function(room) { %>
+<div class="room">
+    <span><%= room.name %></span>
+    <span><%= room.length %>/4</span>
+    <button onclick="open_room_modal('<%= room.id %>')">Join</button>
+</div>
+<% }); %>

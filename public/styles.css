@@ -1,0 +1,86 @@
+:root {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: min(2vh, 1.6vw);
+    font-size: min(2dvh, 1.6dvw);
+    user-select: none;
+    color: white;
+    text-shadow: 0 0 0.2rem black;
+    --blur-light: blur(0.3rem);
+    --blur: blur(0.5rem);
+    --glass-light: rgba(250, 250, 250, 0.3);
+    --glass: rgba(200, 200, 200, 0.3);
+    --glass-dark: rgba(140, 140, 140, 0.3);
+    view-transition-name: none;
+}
+body {
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    height: 100dvh;
+    background: black;
+}
+.wrapper {
+    z-index: -1;
+    aspect-ratio: 5 / 4;
+    width: 100%; /* Allow it to scale with the width */
+    max-width: 200dvh; /* Keep it from exceeding a viewport width */
+    max-height: 100%; /* Keep it from exceeding the viewport height */
+    position: relative;
+    background-image: radial-gradient(at 10% 10%, hsla(4, 97%, 6%, 1) 0px, transparent 50%),
+        radial-gradient(at 90% 10%, hsla(104, 92%, 6%, 1) 0px, transparent 50%),
+        radial-gradient(at 90% 90%, hsla(208, 100%, 6%, 1) 0px, transparent 50%),
+        radial-gradient(at 10% 90%, hsla(48, 92%, 6%, 1) 0px, transparent 50%);
+}
+
+input,
+dialog {
+    color: white;
+}
+
+button {
+    position: relative;
+    border: 0;
+    color: white;
+    border-radius: 1rem;
+    background: var(--glass);
+    text-shadow: 0 0 0.2rem black;
+}
+button:hover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: inherit;
+    filter: var(--blur);
+}
+button:disabled {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+#options {
+    position: absolute;
+    top: 1rem;
+    right: -4rem;
+    width: 3rem;
+    height: 20rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+#options button {
+    width: 3rem;
+    height: 3rem;
+    border: 0;
+    padding: 0;
+    font-size: 1.4rem;
+    border-radius: 50%;
+}
+#options img {
+    width: 3rem;
+    height: 3rem;
+}
