@@ -13,7 +13,8 @@ function updateRoom(io, roomId, delay = 0) {
 
 function playBots(io, roomId) {
     const room = roomManager.getRoom(roomId);
-    if (!room || room.current_player >= room.players.length) return;
+    if (!room || room.state === "l") return;
+    if (room.current_player >= room.players.length) return;
 
     const current = room.players[room.current_player];
     if (!current.bot) return;
