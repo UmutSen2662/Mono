@@ -76,4 +76,10 @@ const CARDS = [
     "card_back",
 ];
 
-module.exports = { AI_NAMES, CARDS };
+const GAME_STATES = {
+    LOBBY: "l",
+    PLAYING: "n",
+    ENDED: "e",
+};
+
+module.exports = { AI_NAMES, CARDS, GAME_STATES };

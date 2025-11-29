@@ -64,7 +64,7 @@ function executeBotTurn(room) {
     let skip = 1;
     let played = false;
 
-    // 1. Check for Draw 4 Stack (sp)
+    // Check for Draw 4 Stack (sp)
     if (topCard.substring(0, 2) === "sp" && room.plus > 1) {
         const cardIndex = current.hand.findIndex((c) => c.substring(0, 2) === "sp");
         if (cardIndex !== -1) {
@@ -76,7 +76,7 @@ function executeBotTurn(room) {
             played = true;
         }
     }
-    // 2. Check for Draw 2 Stack (p)
+    // Check for Draw 2 Stack (p)
     else if (topCard[1] === "p" && room.plus > 1) {
         const cardIndex = current.hand.findIndex((c) => c[1] === "p" && c[0] !== "s");
         if (cardIndex !== -1) {
@@ -87,7 +87,7 @@ function executeBotTurn(room) {
             played = true;
         }
     }
-    // 3. Normal Play
+    // Normal Play
     else {
         if (topCard.length === 4) topCard = topCard[3] + ".";
 
@@ -124,7 +124,7 @@ function executeBotTurn(room) {
         }
     }
 
-    // 4. Draw Card if needed
+    // Draw Card if needed
     if (!played) {
         if (room.deck.length < room.plus + 1) discardToDeck(room);
         const cardsDrawn = room.deck.splice(-room.plus);
@@ -133,7 +133,7 @@ function executeBotTurn(room) {
         room.plus = 1;
     }
 
-    // 5. Check Win
+    // Check Win
     if (current.hand.length === 0) {
         return { won: true };
     }
