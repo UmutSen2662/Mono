@@ -200,77 +200,56 @@ class MonoGame {
         const current = this.players[this.current_player];
         if (!current.bot) return null;
 
-        let topCard = this.discard[this.discard.length - 1];
+        const topCard = this.discard[this.discard.length - 1];
         let played = false;
 
-        // Draw 4 Logic
-        if (topCard.substring(0, 2) === "sp" && this.plus > 1) {
+        // --- PRIORITY 1: Handle Draw Stacking (p4 / p2) ---
+        if (this.state === "p4") {
+            // Must play a Draw 4 (sp) to stack
             const card = current.hand.find((c) => c.substring(0, 2) === "sp");
             if (card) {
-                const color = this._botPickColor(current.hand);
-                this.playCard(current.id, card);
-
-                const playedCardInDiscard = this.discard.pop();
-                this.discard.push(playedCardInDiscard + color);
-                this.state = "p4";
-
-                this._nextTurn(1);
+                this._playBotWild(current, card, true);
                 played = true;
             }
-        }
-        // Draw 2 Logic
-        else if (topCard[1] === "p" && this.plus > 1) {
+        } else if (this.state === "p2") {
+            // Must play a Draw 2 (p) to stack
             const card = current.hand.find((c) => c[1] === "p" && c[0] !== "s");
             if (card) {
                 this.playCard(current.id, card);
                 played = true;
             }
         }
-        // Normal Logic
+        // --- PRIORITY 2: Normal Play ---
         else {
-            if (topCard.length === 4) topCard = topCard[3] + ".";
+            // Find the FIRST card that the Engine allows
+            const playableCard = current.hand.find((c) => this._isPlayable(topCard, c));
 
-            // Try regular
-            const regCard = current.hand.find((c) => (c[0] === topCard[0] || c[1] === topCard[1]) && c[0] !== "s");
-            if (regCard) {
-                this.playCard(current.id, regCard);
-                played = true;
-            }
-
-            // Try wild
-            if (!played) {
-                const wildCard = current.hand.find((c) => c[0] === "s");
-                if (wildCard) {
-                    const color = this._botPickColor(current.hand);
-                    // Manually handle wild play + color to avoid async issues
-                    current.hand = current.hand.filter((c) => c !== wildCard);
-
-                    let nextState = "n";
-                    let addPlus = 0;
-                    if (wildCard[1] === "p") {
-                        nextState = "p4";
-                        addPlus = this.plus !== 1 ? 4 : 3;
-                    }
-
-                    this.discard.push(wildCard + color);
-                    this.state = nextState;
-                    if (addPlus > 0) this.plus += addPlus;
-
-                    if (current.hand.length === 0) {
-                        current.score++;
-                        return { winner: current, played: true };
-                    }
-
-                    this._nextTurn(1);
-                    played = true;
+            if (playableCard) {
+                // If it's a Wild, handle color picking manually
+                if (playableCard[0] === "s") {
+                    this._playBotWild(current, playableCard, false);
+                } else {
+                    this.playCard(current.id, playableCard);
                 }
+                played = true;
             }
         }
 
         if (!played) {
+            // Capture who is playing BEFORE the draw
+            const playerIndexBeforeDraw = this.current_player;
+
             this.drawCard(current.id);
+
+            // FIX: Check if the turn passed.
+            // If current_player is STILL the same after drawing, it means
+            // the drawn card is playable and the bot kept the turn.
+            if (this.current_player === playerIndexBeforeDraw) {
+                return { played: false, keepTurn: true };
+            }
         }
 
+        // Check Win
         if (current.hand.length === 0) {
             current.score++;
             return { winner: current, played: true };
@@ -280,6 +259,22 @@ class MonoGame {
     }
 
     // --- Private Helpers ---
+    _playBotWild(player, card, isStacking) {
+        const color = this._botPickColor(player.hand);
+
+        player.hand = player.hand.filter((c) => c !== card);
+        this.discard.push(card + color);
+
+        if (isStacking || card[1] === "p") {
+            this.state = "p4";
+            this.plus += this.plus !== 1 ? 4 : 3;
+        } else {
+            this.state = GAME_STATES.PLAYING;
+        }
+
+        this._nextTurn(1);
+    }
+
     _setupDeck() {
         let deck = [];
         ["r", "g", "b", "y"].forEach((color) => {

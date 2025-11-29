@@ -1,11 +1,11 @@
-const { AI_NAMES, GAME_STATES } = require("../constants");
+const { GAME_STATES } = require("../constants");
 const roomManager = require("../models/RoomManager");
 
-function updateRoom(io, roomId, delay = 0) {
+function updateRoom(io, roomId, delay = 0, nextBotDelay = null) {
     const room = roomManager.getRoom(roomId);
     if (!room) return;
     io.to(roomId).emit("room_update", { room: room, delay: delay });
-    playBots(io, roomId);
+    playBots(io, roomId, nextBotDelay);
 }
 
 function handleWin(io, room, winner) {
@@ -22,12 +22,15 @@ function handleWin(io, room, winner) {
     }, 1000); // 1 second delay for the win animation
 }
 
-function playBots(io, roomId) {
+// Add 'customDelay' parameter
+function playBots(io, roomId, customDelay = null) {
     const room = roomManager.getRoom(roomId);
     const botMove = room ? room.getBotMove() : null;
+
     if (!botMove) return;
 
     const currentMatchId = botMove.matchId;
+    const timerDuration = customDelay !== null ? customDelay : Math.floor(Math.random() * 600) + 800;
 
     setTimeout(() => {
         const freshRoom = roomManager.getRoom(roomId);
@@ -42,8 +45,14 @@ function playBots(io, roomId) {
             return;
         }
 
-        updateRoom(io, roomId, Math.floor(Math.random() * 600) + 800);
-    }, Math.floor(Math.random() * 600) + 800);
+        // FIX: Check if the bot wants to keep the turn (Fast Pass)
+        let nextDelay = null;
+        if (result && result.keepTurn) {
+            nextDelay = 400;
+        }
+
+        updateRoom(io, roomId, Math.floor(Math.random() * 600) + 800, nextDelay);
+    }, timerDuration);
 }
 
 module.exports = (io) => {
