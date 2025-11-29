@@ -30,6 +30,14 @@
         color_sounds[i] = new Audio("/public/audio/color" + (i + 1) + ".mp3");
         color_sounds[i].load();
     }
+    const win_sound = new Audio("/public/audio/win.mp3");
+    win_sound.load();
+
+    function play_win_sound() {
+        if (localStorage.getItem("sound") == 0) return;
+        win_sound.volume = 0.8;
+        win_sound.play().catch((e) => console.log("Audio play failed", e));
+    }
 
     function play_card_sound() {
         if (localStorage.getItem("sound") == 0 || room.state == "s") {
@@ -112,6 +120,21 @@
         if (room.state == "s") {
             start_game();
         }
+
+        // Clean up old winner animations first
+        players.forEach((p) => {
+            if (p.nameplate) p.nameplate.classList.remove("winner-animation");
+        });
+
+        if (data.winnerId) {
+            play_win_sound();
+
+            const winnerIndex = room.players.findIndex((p) => p.id === data.winnerId);
+            if (winnerIndex !== -1 && players[winnerIndex]) {
+                players[winnerIndex].nameplate.classList.add("winner-animation");
+            }
+        }
+
         if (room.state != "l") {
             static();
             document.startViewTransition(() => {

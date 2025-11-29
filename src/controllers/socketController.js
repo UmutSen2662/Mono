@@ -9,9 +9,12 @@ function updateRoom(io, roomId, delay = 0, nextBotDelay = null) {
 }
 
 function handleWin(io, room, winner) {
-    io.to(room.id).emit("room_update", { room: room, delay: 0 });
+    io.to(room.id).emit("room_update", {
+        room: room,
+        delay: 0,
+        winnerId: winner.id,
+    });
 
-    // Wait for animation, then reset
     setTimeout(() => {
         const freshRoom = roomManager.getRoom(room.id);
         if (!freshRoom) return;
@@ -19,7 +22,7 @@ function handleWin(io, room, winner) {
         freshRoom.resetToLobby();
         io.to(room.id).emit("room_update", { room: freshRoom, delay: 0 });
         io.to("lobby").emit("rooms_changed");
-    }, 1000); // 1 second delay for the win animation
+    }, 1000);
 }
 
 function playBots(io, roomId, customDelay = null) {
