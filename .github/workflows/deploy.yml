@@ -33,4 +33,4 @@ jobs:
             # Install dependencies
             /usr/bin/npm ci --production
             # Restart
-            sudo systemctl restart mono
+            sudo /usr/bin/systemctl restart mono
