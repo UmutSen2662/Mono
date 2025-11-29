@@ -22,22 +22,42 @@ function handleWin(io, room, winner) {
     }, 1000); // 1 second delay for the win animation
 }
 
-// Add 'customDelay' parameter
 function playBots(io, roomId, customDelay = null) {
     const room = roomManager.getRoom(roomId);
-    const botMove = room ? room.getBotMove() : null;
 
+    if (!room || room.state === "l") return;
+
+    if (room.current_player >= room.players.length) return;
+
+    const current = room.players[room.current_player];
+
+    if (!current.bot) return;
+
+    let timerDuration;
+    if (customDelay !== null) {
+        // Use the "Fast Pass" override (e.g. 400ms after drawing)
+        timerDuration = customDelay;
+    } else {
+        const handSize = Math.max(1, current.hand.length);
+        const baseDelay = 500;
+        const scalingDelay = Math.log(handSize) * 360;
+        const randomVariation = Math.random() * 240;
+
+        timerDuration = Math.floor(baseDelay + scalingDelay + randomVariation);
+    }
+
+    const botMove = room.getBotMove();
     if (!botMove) return;
 
     const currentMatchId = botMove.matchId;
-    const timerDuration = customDelay !== null ? customDelay : Math.floor(Math.random() * 600) + 800;
 
     setTimeout(() => {
         const freshRoom = roomManager.getRoom(roomId);
         if (!freshRoom) return;
-        if (freshRoom.state === GAME_STATES.LOBBY) return;
+        if (freshRoom.state === "l") return;
         if (freshRoom.matchId !== currentMatchId) return;
 
+        // Execute logic
         const result = freshRoom.executeBotLogic();
 
         if (result && result.winner) {
@@ -45,13 +65,14 @@ function playBots(io, roomId, customDelay = null) {
             return;
         }
 
-        // FIX: Check if the bot wants to keep the turn (Fast Pass)
+        // Fast Pass Check
         let nextDelay = null;
         if (result && result.keepTurn) {
             nextDelay = 400;
         }
 
-        updateRoom(io, roomId, Math.floor(Math.random() * 600) + 800, nextDelay);
+        // Pass the calculated delay to the next update
+        updateRoom(io, roomId, 0, nextDelay);
     }, timerDuration);
 }
 
