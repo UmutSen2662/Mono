@@ -43,7 +43,6 @@ module.exports = (io) => {
         let name = req.params.name.substring(5);
         let password = req.params.password.substring(9);
 
-        // Redundancy check: RoomManager handles this, but keeping it here is fine
         if (name === "") name = generateRoomName();
 
         const id = uuidv4().replace(/-/g, "");
@@ -53,7 +52,7 @@ module.exports = (io) => {
         io.to("lobby").emit("rooms_changed");
     });
 
-    // Get Room Password (for checking before join)
+    // Get Room Password
     router.get("/room_password/:id", (req, res) => {
         const room = roomManager.getRoom(req.params.id);
         res.send(room ? room.password : "");
